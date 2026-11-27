@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Gallery Admin | Hajar Art Gallery</title>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root { --dark:#2D3142; --pink:#FF6B9D; --purple:#A78BFA; --green:#2f9e63; --muted:#666; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Quicksand', sans-serif; color: var(--dark); background: linear-gradient(135deg,#FFF9F0 0%,#FFE8F5 50%,#E0F4FF 100%); min-height: 100vh; padding: 2rem 1rem; }
+        main { max-width: 640px; margin: 0 auto; background: #fff; border-radius: 20px; padding: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+        h1 { font-family: 'Caveat', cursive; font-size: 2.6rem; color: var(--pink); margin-bottom: .3rem; }
+        p.lead { color: var(--muted); margin-bottom: 1.2rem; }
+        label { font-weight: 600; display: block; margin-bottom: .4rem; }
+        input[type=password] { width: 100%; padding: .8rem; border: 2px solid #E0E0E0; border-radius: 10px; font: inherit; margin-bottom: .8rem; }
+        input[type=password]:focus { outline: none; border-color: var(--pink); }
+        button { font: inherit; font-weight: 600; border-radius: 25px; padding: .55rem 1.1rem; cursor: pointer; border: 2px solid var(--pink); background: transparent; color: var(--dark); }
+        button.primary { background: linear-gradient(135deg, var(--pink), var(--purple)); color: #fff; border-color: transparent; }
+        button:disabled { opacity: .5; cursor: not-allowed; }
+        ul { list-style: none; margin-top: 1rem; }
+        li { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .8rem 0; border-top: 1px solid #eee; flex-wrap: wrap; }
+        .name { font-weight: 600; flex: 1 1 200px; }
+        .tag { font-size: .85rem; font-weight: 700; padding: .2rem .7rem; border-radius: 20px; }
+        .tag.available { background: #E6F7EE; color: var(--green); }
+        .tag.sold { background: #FFE3EC; color: #d6336c; }
+        .tag.reserved { background: #FFF4D6; color: #b7791f; }
+        #msg { margin-top: 1rem; font-weight: 600; min-height: 1.4rem; }
+        .note { margin-top: 1.4rem; font-size: .9rem; color: var(--muted); }
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Gallery Admin</h1>
+    <p class="lead">Mark an original artwork as sold (for example after selling it in person), or put it back on sale.</p>
+
+    <section id="login">
+        <label for="token">Admin password</label>
+        <input type="password" id="token" autocomplete="current-password" placeholder="The ADMIN_TOKEN you set in Netlify">
+        <button class="primary" id="signin">Sign in</button>
+    </section>
+
+    <section id="panel" hidden>
+        <ul id="list"></ul>
+        <p class="note"><strong>Reserved</strong> means a payment is pending, or PayPal did not confirm the outcome. Check your PayPal account first: if the money arrived, press <em>Mark sold</em>; if not, press <em>Put back on sale</em>.</p>
+    </section>
+
+    <p id="msg" role="status"></p>
+</main>
+
+<script>
+    // The password lives only in this variable while the page is open — never saved anywhere.
+    var adminToken = '';
+    var ARTWORKS = [
+        ['midnightbloom', 'Midnight Bloom'], ['whispersshoreline', 'Whispers of the Shoreline'],
+        ['coastalquiet', 'Coastal Quiet'], ['bluehorizon', 'Blue Horizon'],
+        ['quietisland', 'The Quiet Island'], ['acrossquietwater', 'Across the Quiet Water'],
+        ['adriaticatmosphere', 'Adriatic Atmosphere'], ['celestial', 'Celestial Bloom'],
+        ['quietcurrent', 'Quiet Current'], ['housesbluehill', 'Houses on the Blue Hill'],
+        ['littlehill', 'Little Hill, Quiet Sea'], ['sunsetmosaic', 'Sunset Mosaic Hills'],
+        ['gatheredsilence', 'Gathered Silence'], ['quiethorizongrove', 'Quiet Horizon Grove']
+    ];
+    var msg = document.getElementById('msg');
+
+    function api(method, body) {
+        return fetch('/api/admin/status', {
+            method: method,
+            headers: { 'Authorization': 'Bearer ' + adminToken, 'Content-Type': 'application/json' },
+            body: body ? JSON.stringify(body) : undefined
+        }).then(function (res) {
+            return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+        });
+    }
+
+    function render(statuses) {
+        var list = document.getElementById('list');
+        list.innerHTML = '';
+        ARTWORKS.forEach(function (a) {
+            var state = statuses[a[0]] || 'available';
+            var li = document.createElement('li');
+            var name = document.createElement('span'); name.className = 'name'; name.textContent = a[1];
+            var tag = document.createElement('span'); tag.className = 'tag ' + state; tag.textContent = state.toUpperCase();
+            var btn = document.createElement('button');
+            if (state === 'sold') { btn.textContent = 'Put back on sale'; btn.onclick = function () { change(a, 'available'); }; }
+            else { btn.textContent = 'Mark sold'; btn.className = 'primary'; btn.onclick = function () { change(a, 'sold'); }; }
+            li.appendChild(name); li.appendChild(tag);
+            if (state === 'reserved') {
+                var back = document.createElement('button'); back.textContent = 'Put back on sale';
+                back.onclick = function () { change(a, 'available'); };
+                li.appendChild(back);
+            }
+            li.appendChild(btn);
+            list.appendChild(li);
+        });
+    }
+
+    function change(a, status) {
+        var question = status === 'sold'
+            ? 'Mark "' + a[1] + '" as SOLD? Customers will no longer be able to buy it.'
+            : 'Put "' + a[1] + '" back on sale?';
+        if (!window.confirm(question)) return;
+        msg.textContent = 'Saving…';
+        api('POST', { artwork: a[0], status: status }).then(function (r) {
+            if (r.ok) { render(r.data.artworks); msg.textContent = a[1] + ' is now ' + status.toUpperCase() + '.'; }
+            else msg.textContent = 'Could not save (' + (r.data.error || r.status) + ').';
+        });
+    }
+
+    document.getElementById('signin').onclick = function () {
+        adminToken = document.getElementById('token').value.trim();
+        msg.textContent = 'Checking…';
+        api('GET').then(function (r) {
+            if (r.ok) {
+                document.getElementById('login').hidden = true;
+                document.getElementById('panel').hidden = false;
+                render(r.data.artworks); msg.textContent = '';
+            } else if (r.data.error === 'admin-disabled') {
+                msg.textContent = 'Admin is not set up yet: add a long ADMIN_TOKEN in Netlify (see the setup guide).';
+            } else {
+                msg.textContent = 'Wrong password.';
+            }
+            adminToken = r.ok ? adminToken : '';
+        }).catch(function () { msg.textContent = 'Could not reach the server.'; });
+    };
+    document.getElementById('token').addEventListener('keydown', function (e) { if (e.key === 'Enter') document.getElementById('signin').click(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "hajar-art-gallery",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hajar Art Gallery — static site with Netlify Functions for original-artwork payments",
+  "dependencies": {
+    "@netlify/blobs": "11.1.9"
+  }
+}
